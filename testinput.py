@@ -1,18 +1,25 @@
 from libinput import LibInput, ContextType, EventType
+from math import pi, isclose
+from cmath import phase
+
 li = LibInput(context_type=ContextType.PATH)
 
 device = li.add_device('/dev/input/event1')
+(X,Y)=device.size
+X_GRID_SIZE=3
+Y_GRID_SIZE=5
 
+DIRECTION_ANGLES=[0, pi/2, pi, -pi, -pi/2, pi/4, 3*pi/4, -3*pi/4, -pi/4]   #Starting with right, up, left, down, then up-left, up-right, down-left, down-right, to give priority to horizontal and veretical swipe over diagonal (on special cases such as pi/8)
+# pi is present alog with -pi to counter problems with disconinuty on borders
 
 gesture_description = {}
-list_events=[]
+last_coords={}
 
 def main():
     for e in li.events:
         if e.type.is_touch():
 
             #Some debug info
-            list_events.append(e)
             if e.type==EventType.TOUCH_FRAME:
                 print([e.time, e.type.name])
             if e.type == EventType.TOUCH_DOWN:
@@ -29,14 +36,31 @@ def main():
                     "start_pos": e.coords,
                     "start_pos_grid": get_grid_coords(e.coords)
                 } 
+                last_coords[e.slot]=e.coords
+                gesture_description[e.slot]["gesture"]=[]
+
+            if e.type==EventType.TOUCH_MOTION:
+                gesture_description[e.slot]["gesture"].append(get_direction(e.coords, last_coords[e.slot]))
+                last_coords[e.slot]=e.coords
 
 def get_grid_coords(coords):
-    (X,Y)=device.size
     (x,y)=coords
-    X_grid_size=3
-    Y_grid_size=5
+    return (int(x/(X/X_GRID_SIZE)), int(y/(Y/Y_GRID_SIZE)))
 
-    return (int(x/(X/X_grid_size)), int(y/(Y/Y_grid_size)))
+def get_direction(coords, last_coords):
+    (x,y)=coords
+    (lx,ly)=last_coords
+    delta_x=lx-x
+    delta_y=ly-y
+    motion_vec=complex(delta_x, delta_y)
+    motion_angle=phase(motion_vec)
+
+    #isclose(diag, tm[1], abs_tol=pi/4)
+    #Find closesed angle in cardinal direction + up-left etc...
+    direction=filter(lambda direction_angle: isclose(direction_angle, motion_angle, abs_tol=pi/8), DIRECTION_ANGLES)
+    return int(next(direction)/(pi/4))
+
+    
 
     # (63.470588235294116, 112.88235294117646)  device.size
     # (13.470588235294118, 15.411764705882353)  top left
